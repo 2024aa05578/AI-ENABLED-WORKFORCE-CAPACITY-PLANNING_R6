@@ -4,7 +4,7 @@ import pandas as pd
 
 def calculate_workforce(
     df,
-    regional_growth,
+    growth_parameters,
     attrition_parameters,
     productive_hours,
     working_days,
@@ -19,8 +19,11 @@ def calculate_workforce(
         region = row["Region"]
         product = row["Product"]
 
-        growth = regional_growth.get(
+        growth = growth_parameters.get(
             region,
+            {}
+        ).get(
+            product,
             {
                 "BAU": 0,
                 "DC": 0
