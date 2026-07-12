@@ -121,3 +121,336 @@ attrition_parameters = {}
 
 with st.sidebar.expander("Attrition %", expanded=False):
     for product in PRODUCTS:
+        attrition_value = st.slider(
+            f"{product} Attrition %",
+            min_value=0,
+            max_value=30,
+            value=8,
+            key=f"{clean_key(product)}_attrition"
+        )
+
+        attrition_parameters[product] = attrition_value
+
+
+# =====================================================
+# SIDEBAR - PRODUCTIVITY PARAMETERS
+# =====================================================
+
+st.sidebar.title("Workforce Productivity")
+
+productive_hours = st.sidebar.slider(
+    "Productive Hours Per Day",
+    min_value=4,
+    max_value=10,
+    value=7
+)
+
+working_days = st.sidebar.slider(
+    "Working Days Per Month",
+    min_value=15,
+    max_value=26,
+    value=20
+)
+
+target_utilization = st.sidebar.slider(
+    "Target Engineer Utilization %",
+    min_value=60,
+    max_value=100,
+    value=90
+)
+
+
+# =====================================================
+# MAIN PAGE
+# =====================================================
+
+st.title("AI Enabled Workforce & Capacity Planning")
+
+st.write(
+    """
+    This application estimates service engineer requirements based on:
+
+    - Current service engineer count
+    - Breakdown, preventive maintenance and startup work orders
+    - Average hours per work order type
+    - Region-wise and product-wise BAU growth
+    - Region-wise and product-wise DC growth
+    - BU-wise attrition
+    - Engineer productivity assumptions
+    """
+)
+
+
+uploaded_file = st.file_uploader(
+    "Upload workforce_input.csv",
+    type=["csv"]
+)
+
+
+if uploaded_file is not None:
+    df = pd.read_csv(uploaded_file)
+
+    required_columns = [
+        "Region",
+        "Product",
+        "Current_SE",
+        "Breakdown_WO",
+        "Breakdown_Hrs",
+        "PM_WO",
+        "PM_Hrs",
+        "Startup_WO",
+        "Startup_Hrs"
+    ]
+
+    missing_columns = [
+        col for col in required_columns
+        if col not in df.columns
+    ]
+
+    if missing_columns:
+        st.error(f"Missing required columns: {missing_columns}")
+        st.stop()
+
+    df["Region"] = df["Region"].astype(str).str.strip()
+    df["Product"] = df["Product"].astype(str).str.strip()
+    df["Product"] = df["Product"].replace(PRODUCT_ALIASES)
+
+    invalid_regions = sorted(
+        set(df["Region"].unique()) - set(REGIONS)
+    )
+
+    invalid_products = sorted(
+        set(df["Product"].unique()) - set(PRODUCTS)
+    )
+
+    if invalid_regions:
+        st.error(f"Invalid regions found in uploaded file: {invalid_regions}")
+        st.stop()
+
+    if invalid_products:
+        st.error(f"Invalid products found in uploaded file: {invalid_products}")
+        st.stop()
+
+    numeric_columns = [
+        "Current_SE",
+        "Breakdown_WO",
+        "Breakdown_Hrs",
+        "PM_WO",
+        "PM_Hrs",
+        "Startup_WO",
+        "Startup_Hrs"
+    ]
+
+    for col in numeric_columns:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    if df[numeric_columns].isnull().any().any():
+        st.error("Some numeric columns contain blank or invalid values.")
+        st.stop()
+
+    st.subheader("Input Data")
+    st.dataframe(df, use_container_width=True)
+
+    result = calculate_workforce(
+        df=df,
+        growth_parameters=growth_parameters,
+        attrition_parameters=attrition_parameters,
+        productive_hours=productive_hours,
+        working_days=working_days,
+        target_utilization=target_utilization
+    )
+
+    st.subheader("Workforce Planning Results")
+    st.dataframe(result, use_container_width=True)
+
+    total_current = df["Current_SE"].sum()
+
+    total_available = round(
+        result["Available Engineers"].sum(),
+        1
+    )
+
+    total_required = round(
+        result["Required Engineers"].sum(),
+        1
+    )
+
+    total_hiring = int(
+        result["Additional Required"].sum()
+    )
+
+    total_net_gap = round(
+        result["Net Gap / Surplus"].sum(),
+        1
+    )
+
+    c1, c2, c3, c4, c5, c6, c7, c8 = st.columns(8)
+
+    c1.metric("Current SE", total_current)
+    c2.metric("Available After Attrition", total_available)
+    c3.metric("Required SE", total_required)
+    c4.metric("Hiring Gap", total_hiring)
+    c5.metric("Net Gap / Surplus", total_net_gap)
+    c6.metric("Hrs/Day", productive_hours)
+    c7.metric("Days/Month", working_days)
+    c8.metric("Utilization %", target_utilization)
+
+    # =====================================================
+    # REQUIRED ENGINEERS CHARTS
+    # =====================================================
+
+    st.subheader("Required Engineers by Product Line")
+
+    required_by_product = result.groupby("Product")["Required Engineers"].sum()
+
+    st.bar_chart(required_by_product)
+
+    st.dataframe(
+        required_by_product.reset_index().rename(
+            columns={"Required Engineers": "Total Required Engineers"}
+        ),
+        use_container_width=True
+    )
+
+    st.subheader("Required Engineers by Region")
+
+    required_by_region = result.groupby("Region")["Required Engineers"].sum()
+
+    st.bar_chart(required_by_region)
+
+    st.dataframe(
+        required_by_region.reset_index().rename(
+            columns={"Required Engineers": "Total Required Engineers"}
+        ),
+        use_container_width=True
+    )
+
+    st.subheader("Required Engineers Matrix - Product vs Region")
+
+    required_matrix = result.pivot_table(
+        values="Required Engineers",
+        index="Product",
+        columns="Region",
+        fill_value=0,
+        aggfunc="sum"
+    )
+
+    st.dataframe(required_matrix, use_container_width=True)
+
+    # =====================================================
+    # ADDITIONAL HIRING GAP CHARTS
+    # =====================================================
+
+    st.subheader("Additional Hiring Gap by Product Line")
+
+    hiring_by_product = result.groupby("Product")["Additional Required"].sum()
+
+    st.bar_chart(hiring_by_product)
+
+    st.dataframe(
+        hiring_by_product.reset_index().rename(
+            columns={"Additional Required": "Additional Hiring Required"}
+        ),
+        use_container_width=True
+    )
+
+    st.subheader("Additional Hiring Gap by Region")
+
+    hiring_by_region = result.groupby("Region")["Additional Required"].sum()
+
+    st.bar_chart(hiring_by_region)
+
+    st.dataframe(
+        hiring_by_region.reset_index().rename(
+            columns={"Additional Required": "Additional Hiring Required"}
+        ),
+        use_container_width=True
+    )
+
+    st.subheader("Additional Hiring Matrix - Product vs Region")
+
+    hiring_matrix = result.pivot_table(
+        values="Additional Required",
+        index="Product",
+        columns="Region",
+        fill_value=0,
+        aggfunc="sum"
+    )
+
+    st.dataframe(hiring_matrix, use_container_width=True)
+
+    # =====================================================
+    # NET GAP / SURPLUS
+    # =====================================================
+
+    st.subheader("Net Gap / Surplus Matrix")
+
+    net_gap_matrix = result.pivot_table(
+        values="Net Gap / Surplus",
+        index="Product",
+        columns="Region",
+        fill_value=0,
+        aggfunc="sum"
+    )
+
+    st.dataframe(net_gap_matrix, use_container_width=True)
+
+    st.info(
+        "Net Gap / Surplus: Positive value means shortage. Negative value means surplus."
+    )
+
+    # =====================================================
+    # GROWTH MATRICES
+    # =====================================================
+
+    st.subheader("BAU Growth Matrix")
+
+    bau_matrix = result.pivot_table(
+        values="BAU Growth %",
+        index="Product",
+        columns="Region",
+        fill_value=0,
+        aggfunc="mean"
+    )
+
+    st.dataframe(bau_matrix, use_container_width=True)
+
+    st.subheader("DC Growth Matrix")
+
+    dc_matrix = result.pivot_table(
+        values="DC Growth %",
+        index="Product",
+        columns="Region",
+        fill_value=0,
+        aggfunc="mean"
+    )
+
+    st.dataframe(dc_matrix, use_container_width=True)
+
+    st.subheader("Total Growth Matrix")
+
+    growth_matrix = result.pivot_table(
+        values="Total Growth %",
+        index="Product",
+        columns="Region",
+        fill_value=0,
+        aggfunc="mean"
+    )
+
+    st.dataframe(growth_matrix, use_container_width=True)
+
+    # =====================================================
+    # DOWNLOAD OUTPUT
+    # =====================================================
+
+    csv_output = result.to_csv(index=False).encode("utf-8")
+
+    st.download_button(
+        label="Download Workforce Planning Output",
+        data=csv_output,
+        file_name="workforce_planning_output.csv",
+        mime="text/csv"
+    )
+
+else:
+    st.info("Please upload workforce_input.csv to start workforce planning.")
