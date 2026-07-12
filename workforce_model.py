@@ -8,7 +8,7 @@ def calculate_workforce(
     attrition_parameters,
     productive_hours,
     working_days,
-    target_utilization
+    target_utilization,
 ):
     results = []
 
@@ -34,7 +34,10 @@ def calculate_workforce(
         dc_growth = growth["DC"]
         total_growth = bau_growth + dc_growth
 
-        attrition = attrition_parameters.get(product, 8)
+        attrition = attrition_parameters.get(
+            product,
+            8
+        )
 
         current_hours = (
             row["Breakdown_WO"] * row["Breakdown_Hrs"]
@@ -42,9 +45,17 @@ def calculate_workforce(
             + row["Startup_WO"] * row["Startup_Hrs"]
         )
 
-        bau_future_hours = current_hours * (1 + bau_growth / 100)
-        dc_incremental_hours = current_hours * (dc_growth / 100)
-        combined_future_hours = current_hours * (1 + total_growth / 100)
+        bau_future_hours = current_hours * (
+            1 + bau_growth / 100
+        )
+
+        dc_incremental_hours = current_hours * (
+            dc_growth / 100
+        )
+
+        combined_future_hours = current_hours * (
+            1 + total_growth / 100
+        )
 
         current_required_engineers = current_hours / effective_capacity
         bau_required_engineers = bau_future_hours / effective_capacity
@@ -57,21 +68,6 @@ def calculate_workforce(
 
         bau_gap = bau_required_engineers - available_engineers
         combined_gap = combined_required_engineers - available_engineers
-
-        bau_additional_required = max(
-            math.ceil(bau_gap),
-            0
-        )
-
-        dc_additional_required = max(
-            math.ceil(dc_incremental_engineers),
-            0
-        )
-
-        combined_additional_required = max(
-            math.ceil(combined_gap),
-            0
-        )
 
         results.append(
             {
@@ -90,15 +86,24 @@ def calculate_workforce(
                 "Current Required Engineers": round(current_required_engineers, 1),
                 "BAU Future Hours": round(bau_future_hours),
                 "BAU Required Engineers": round(bau_required_engineers, 1),
-                "BAU Additional Required": bau_additional_required,
+                "BAU Additional Required": max(
+                    math.ceil(bau_gap),
+                    0
+                ),
                 "DC Incremental Hours": round(dc_incremental_hours),
                 "DC Incremental Engineers": round(dc_incremental_engineers, 1),
-                "DC Additional Required": dc_additional_required,
+                "DC Additional Required": max(
+                    math.ceil(dc_incremental_engineers),
+                    0
+                ),
                 "Combined Future Hours": round(combined_future_hours),
                 "Combined Required Engineers": round(combined_required_engineers, 1),
                 "Available Engineers": round(available_engineers, 1),
                 "Combined Net Gap / Surplus": round(combined_gap, 1),
-                "Combined Additional Required": combined_additional_required
+                "Combined Additional Required": max(
+                    math.ceil(combined_gap),
+                    0
+                ),
             }
         )
 
