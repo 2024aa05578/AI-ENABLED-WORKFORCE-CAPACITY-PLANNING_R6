@@ -83,11 +83,12 @@ for region in REGIONS:
         st.markdown("### BAU Growth")
 
         for product in PRODUCTS:
-            bau_value = st.slider(
+            bau_value = st.number_input(
                 f"{region} - {product} BAU Growth %",
-                min_value=0,
-                max_value=100,
-                value=default_bau[product],
+                min_value=0.0,
+                max_value=100.0,
+                value=float(default_bau[product]),
+                step=1.0,
                 key=f"{clean_key(region)}_{clean_key(product)}_bau"
             )
 
@@ -100,11 +101,12 @@ for region in REGIONS:
         st.markdown("### DC Growth")
 
         for product in PRODUCTS:
-            dc_value = st.slider(
+            dc_value = st.number_input(
                 f"{region} - {product} DC Growth %",
-                min_value=0,
-                max_value=100,
-                value=default_dc[product],
+                min_value=0.0,
+                max_value=100.0,
+                value=float(default_dc[product]),
+                step=1.0,
                 key=f"{clean_key(region)}_{clean_key(product)}_dc"
             )
 
@@ -121,11 +123,12 @@ attrition_parameters = {}
 
 with st.sidebar.expander("Attrition %", expanded=False):
     for product in PRODUCTS:
-        attrition_value = st.slider(
+        attrition_value = st.number_input(
             f"{product} Attrition %",
-            min_value=0,
-            max_value=30,
-            value=8,
+            min_value=0.0,
+            max_value=30.0,
+            value=8.0,
+            step=1.0,
             key=f"{clean_key(product)}_attrition"
         )
 
@@ -138,25 +141,28 @@ with st.sidebar.expander("Attrition %", expanded=False):
 
 st.sidebar.title("Workforce Productivity")
 
-productive_hours = st.sidebar.slider(
+productive_hours = st.sidebar.number_input(
     "Productive Hours Per Day",
-    min_value=4,
-    max_value=10,
-    value=7
+    min_value=1.0,
+    max_value=24.0,
+    value=7.0,
+    step=0.5
 )
 
-working_days = st.sidebar.slider(
+working_days = st.sidebar.number_input(
     "Working Days Per Month",
-    min_value=15,
-    max_value=26,
-    value=20
+    min_value=1,
+    max_value=31,
+    value=20,
+    step=1
 )
 
-target_utilization = st.sidebar.slider(
+target_utilization = st.sidebar.number_input(
     "Target Engineer Utilization %",
-    min_value=60,
-    max_value=100,
-    value=90
+    min_value=1.0,
+    max_value=100.0,
+    value=90.0,
+    step=1.0
 )
 
 
