@@ -40,8 +40,17 @@ def calculate_workforce(
         )
 
         future_hours = current_hours * (1 + total_growth / 100)
+
         required_engineers = future_hours / effective_capacity
-        available_engineers = row["Current_SE"] * (1 - attrition / 100)
+
+        available_engineers = row["Current_SE"] * (
+            1 - attrition / 100
+        )
+
+        net_gap = round(
+            required_engineers - available_engineers,
+            1
+        )
 
         additional_required = max(
             math.ceil(required_engineers - available_engineers),
@@ -65,6 +74,7 @@ def calculate_workforce(
                 "Future Hours": round(future_hours),
                 "Required Engineers": round(required_engineers, 1),
                 "Available Engineers": round(available_engineers, 1),
+                "Net Gap / Surplus": net_gap,
                 "Additional Required": additional_required
             }
         )
