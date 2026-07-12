@@ -10,7 +10,6 @@ st.set_page_config(
     layout="wide"
 )
 
-
 REGIONS = ["North", "West", "South", "East"]
 
 PRODUCTS = [
@@ -52,8 +51,7 @@ def add_total_row_and_column(matrix):
 # =====================================================
 
 st.sidebar.header("📌 Planning Assumptions")
-
-st.sidebar.subheader("🌍 Regional Growth")
+st.sidebar.info("Enter regional growth, product attrition and productivity assumptions below.")
 
 regional_growth = {}
 
@@ -71,21 +69,22 @@ default_dc_region = {
     "East": 5.0
 }
 
-with st.sidebar.expander("BAU and DC Growth by Region", expanded=True):
-    col_region, col_bau, col_dc = st.columns([1.4, 1, 1])
+st.sidebar.subheader("🌍 Regional Growth")
 
-    with col_region:
-        st.markdown("**Region**")
+for region in REGIONS:
+    with st.sidebar.expander(f"{region} Growth", expanded=(region == "North")):
+        bau_col, dc_col = st.columns(2)
 
-    with col_bau:
-        st.markdown("**BAU %**")
+        with bau_col:
+            bau_value = st.number_input(
+                "BAU %",
+                min_value=0.0,
+                max_value=100.0,
+                value=default_bau_region[region],
+                step=1.0,
+                key=f"{clean_key(region)}_bau_growth"
+            )
 
-    with col_dc:
-        st.markdown("**DC %**")
-
-    for region in REGIONS:
-        col_region, col_bau, col_dc = st.columns([1.4, 1, 1])
-
-        with col_region:
-            st.write(region)
-
+        with dc_col:
+            dc_value = st.number_input(
+                "DC %",
