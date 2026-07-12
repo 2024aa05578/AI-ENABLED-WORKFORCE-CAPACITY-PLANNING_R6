@@ -80,4 +80,3 @@ def calculate_workforce(
         )
 
     return pd.DataFrame(results)
-``
