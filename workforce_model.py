@@ -4,7 +4,7 @@ import pandas as pd
 
 def calculate_workforce(
     df,
-    growth_parameters,
+    regional_growth,
     attrition_parameters,
     productive_hours,
     working_days,
@@ -19,19 +19,19 @@ def calculate_workforce(
         region = row["Region"]
         product = row["Product"]
 
-        region_product_params = growth_parameters.get(region, {}).get(
-            product,
+        growth = regional_growth.get(
+            region,
             {
-                "BAU": 20,
+                "BAU": 0,
                 "DC": 0
             }
         )
 
-        bau_growth = region_product_params["BAU"]
-        dc_growth = region_product_params["DC"]
-        attrition = attrition_parameters.get(product, 8)
-
+        bau_growth = growth["BAU"]
+        dc_growth = growth["DC"]
         total_growth = bau_growth + dc_growth
+
+        attrition = attrition_parameters.get(product, 8)
 
         current_hours = (
             row["Breakdown_WO"] * row["Breakdown_Hrs"]
@@ -39,21 +39,34 @@ def calculate_workforce(
             + row["Startup_WO"] * row["Startup_Hrs"]
         )
 
-        future_hours = current_hours * (1 + total_growth / 100)
+        bau_future_hours = current_hours * (1 + bau_growth / 100)
+        dc_incremental_hours = current_hours * (dc_growth / 100)
+        combined_future_hours = current_hours * (1 + total_growth / 100)
 
-        required_engineers = future_hours / effective_capacity
+        current_required_engineers = current_hours / effective_capacity
+        bau_required_engineers = bau_future_hours / effective_capacity
+        dc_incremental_engineers = dc_incremental_hours / effective_capacity
+        combined_required_engineers = combined_future_hours / effective_capacity
 
         available_engineers = row["Current_SE"] * (
             1 - attrition / 100
         )
 
-        net_gap = round(
-            required_engineers - available_engineers,
-            1
+        bau_gap = bau_required_engineers - available_engineers
+        combined_gap = combined_required_engineers - available_engineers
+
+        bau_additional_required = max(
+            math.ceil(bau_gap),
+            0
         )
 
-        additional_required = max(
-            math.ceil(required_engineers - available_engineers),
+        dc_additional_required = max(
+            math.ceil(dc_incremental_engineers),
+            0
+        )
+
+        combined_additional_required = max(
+            math.ceil(combined_gap),
             0
         )
 
@@ -71,11 +84,18 @@ def calculate_workforce(
                 "Annual Capacity": round(annual_capacity),
                 "Effective Capacity": round(effective_capacity),
                 "Current Hours": round(current_hours),
-                "Future Hours": round(future_hours),
-                "Required Engineers": round(required_engineers, 1),
+                "Current Required Engineers": round(current_required_engineers, 1),
+                "BAU Future Hours": round(bau_future_hours),
+                "BAU Required Engineers": round(bau_required_engineers, 1),
+                "BAU Additional Required": bau_additional_required,
+                "DC Incremental Hours": round(dc_incremental_hours),
+                "DC Incremental Engineers": round(dc_incremental_engineers, 1),
+                "DC Additional Required": dc_additional_required,
+                "Combined Future Hours": round(combined_future_hours),
+                "Combined Required Engineers": round(combined_required_engineers, 1),
                 "Available Engineers": round(available_engineers, 1),
-                "Net Gap / Surplus": net_gap,
-                "Additional Required": additional_required
+                "Combined Net Gap / Surplus": round(combined_gap, 1),
+                "Combined Additional Required": combined_additional_required
             }
         )
 
