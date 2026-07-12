@@ -4,12 +4,20 @@ import pandas as pd
 from workforce_model import calculate_workforce
 
 
+# =====================================================
+# PAGE CONFIGURATION
+# =====================================================
+
 st.set_page_config(
     page_title="AI Enabled Workforce & Capacity Planning",
     page_icon="🚀",
     layout="wide"
 )
 
+
+# =====================================================
+# MASTER DATA
+# =====================================================
 
 REGIONS = ["North", "West", "South", "East"]
 
@@ -40,6 +48,10 @@ def clean_key(text):
         .replace("/", "_")
     )
 
+
+# =====================================================
+# INPUT VALIDATION
+# =====================================================
 
 def validate_and_clean_input(df):
     required_columns = [
@@ -105,6 +117,10 @@ def validate_and_clean_input(df):
     return df
 
 
+# =====================================================
+# SIDEBAR - GROWTH INPUTS
+# =====================================================
+
 def build_growth_inputs():
     default_bau = {
         "UPS": 25.0,
@@ -135,14 +151,20 @@ def build_growth_inputs():
         ):
             header_col1, header_col2, header_col3 = st.columns([1.7, 1, 1])
 
-            header_col1.markdown("**Product**")
-            header_col2.markdown("**BAU %**")
-            header_col3.markdown("**DC %**")
+            with header_col1:
+                st.markdown("**Product**")
+
+            with header_col2:
+                st.markdown("**BAU %**")
+
+            with header_col3:
+                st.markdown("**DC %**")
 
             for product in PRODUCTS:
                 product_col, bau_col, dc_col = st.columns([1.7, 1, 1])
 
-                product_col.write(product)
+                with product_col:
+                    st.write(product)
 
                 with bau_col:
                     bau_value = st.number_input(
@@ -174,6 +196,10 @@ def build_growth_inputs():
     return growth_parameters
 
 
+# =====================================================
+# SIDEBAR - ATTRITION INPUTS
+# =====================================================
+
 def build_attrition_inputs():
     st.sidebar.title("BU Wise Attrition")
 
@@ -182,13 +208,17 @@ def build_attrition_inputs():
     with st.sidebar.expander("Attrition Inputs", expanded=False):
         header_col1, header_col2 = st.columns([1.8, 1])
 
-        header_col1.markdown("**Product**")
-        header_col2.markdown("**Attrition %**")
+        with header_col1:
+            st.markdown("**Product**")
+
+        with header_col2:
+            st.markdown("**Attrition %**")
 
         for product in PRODUCTS:
             product_col, attrition_col = st.columns([1.8, 1])
 
-            product_col.write(product)
+            with product_col:
+                st.write(product)
 
             with attrition_col:
                 attrition_value = st.number_input(
@@ -197,3 +227,12 @@ def build_attrition_inputs():
                     max_value=30.0,
                     value=8.0,
                     step=0.5,
+                    key=f"{clean_key(product)}_attrition",
+                    label_visibility="collapsed"
+                )
+
+            attrition_parameters[product] = attrition_value
+
+    return attrition_parameters
+
+
