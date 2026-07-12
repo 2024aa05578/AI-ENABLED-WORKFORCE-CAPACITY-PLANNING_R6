@@ -4,12 +4,20 @@ import pandas as pd
 from workforce_model import calculate_workforce
 
 
+# =====================================================
+# PAGE CONFIGURATION
+# =====================================================
+
 st.set_page_config(
     page_title="AI Enabled Workforce & Capacity Planning",
     page_icon="🚀",
     layout="wide"
 )
 
+
+# =====================================================
+# MASTER DATA
+# =====================================================
 
 REGIONS = ["North", "West", "South", "East"]
 
@@ -32,6 +40,55 @@ PRODUCT_ALIASES = {
 }
 
 
+DEFAULT_REGIONAL_GROWTH = {
+    "North": {"BAU": 20.0, "DC": 10.0},
+    "West": {"BAU": 30.0, "DC": 20.0},
+    "South": {"BAU": 22.0, "DC": 10.0},
+    "East": {"BAU": 15.0, "DC": 5.0}
+}
+
+DEFAULT_ATTRITION = {
+    "UPS": 8.0,
+    "Cooling": 8.0,
+    "Power Products": 8.0,
+    "Power System": 8.0,
+    "Industrial Automation": 8.0
+}
+
+DEFAULT_PRODUCTIVITY = {
+    "productive_hours": 7.0,
+    "working_days": 20,
+    "target_utilization": 90.0
+}
+
+
+# =====================================================
+# SESSION STATE INITIALIZATION
+# =====================================================
+
+if "regional_growth" not in st.session_state:
+    st.session_state.regional_growth = DEFAULT_REGIONAL_GROWTH.copy()
+
+if "attrition_parameters" not in st.session_state:
+    st.session_state.attrition_parameters = DEFAULT_ATTRITION.copy()
+
+if "productive_hours" not in st.session_state:
+    st.session_state.productive_hours = DEFAULT_PRODUCTIVITY["productive_hours"]
+
+if "working_days" not in st.session_state:
+    st.session_state.working_days = DEFAULT_PRODUCTIVITY["working_days"]
+
+if "target_utilization" not in st.session_state:
+    st.session_state.target_utilization = DEFAULT_PRODUCTIVITY["target_utilization"]
+
+if "input_df" not in st.session_state:
+    st.session_state.input_df = None
+
+
+# =====================================================
+# HELPER FUNCTIONS
+# =====================================================
+
 def clean_key(text):
     return str(text).lower().replace(" ", "_").replace("-", "_").replace("/", "_")
 
@@ -47,32 +104,85 @@ def add_total_row_and_column(matrix):
     return matrix
 
 
+def validate_input_data(df):
+    df = df.copy()
+    df.columns = df.columns.str.strip()
+
+    required_columns = [
+        "Region",
+        "Product",
+        "Current_SE",
+        "Breakdown_WO",
+        "Breakdown_Hrs",
+        "PM_WO",
+        "PM_Hrs",
+        "Startup_WO",
+        "Startup_Hrs"
+    ]
+
+    missing_columns = [
+        col for col in required_columns
+        if col not in df.columns
+    ]
+
+    if missing_columns:
+        st.error(f"Missing required columns: {missing_columns}")
+        st.stop()
+
+    df["Region"] = df["Region"].astype(str).str.strip()
+    df["Product"] = df["Product"].astype(str).str.strip()
+    df["Product"] = df["Product"].replace(PRODUCT_ALIASES)
+
+    invalid_regions = sorted(set(df["Region"].unique()) - set(REGIONS))
+    invalid_products = sorted(set(df["Product"].unique()) - set(PRODUCTS))
+
+    if invalid_regions:
+        st.error(f"Invalid regions found in uploaded file: {invalid_regions}")
+        st.stop()
+
+    if invalid_products:
+        st.error(f"Invalid products found in uploaded file: {invalid_products}")
+        st.stop()
+
+    numeric_columns = [
+        "Current_SE",
+        "Breakdown_WO",
+        "Breakdown_Hrs",
+        "PM_WO",
+        "PM_Hrs",
+        "Startup_WO",
+        "Startup_Hrs"
+    ]
+
+    for col in numeric_columns:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    if df[numeric_columns].isnull().any().any():
+        st.error("Some numeric columns contain blank or invalid numeric values.")
+        st.stop()
+
+    return df
+
+
 # =====================================================
-# SIDEBAR INPUTS
+# SIDEBAR FORM
 # =====================================================
 
-st.sidebar.header("Planning Assumptions")
+st.sidebar.header("📌 Planning Assumptions")
 
-regional_growth = {}
+st.sidebar.info(
+    "Change values below and click Apply Assumptions. "
+    "This prevents disconnects caused by rerunning the app after every entry."
+)
 
-default_bau_region = {
-    "North": 20.0,
-    "West": 30.0,
-    "South": 22.0,
-    "East": 15.0
-}
+with st.sidebar.form("planning_assumptions_form"):
+    st.subheader("🌍 Regional Growth")
 
-default_dc_region = {
-    "North": 10.0,
-    "West": 20.0,
-    "South": 10.0,
-    "East": 5.0
-}
+    updated_regional_growth = {}
 
-st.sidebar.subheader("Regional Growth")
+    for region in REGIONS:
+        st.markdown(f"**{region} Growth**")
 
-for region in REGIONS:
-    with st.sidebar.expander(f"{region} Growth", expanded=(region == "North")):
         bau_col, dc_col = st.columns(2)
 
         with bau_col:
@@ -80,9 +190,9 @@ for region in REGIONS:
                 "BAU %",
                 min_value=0.0,
                 max_value=100.0,
-                value=default_bau_region[region],
+                value=float(st.session_state.regional_growth[region]["BAU"]),
                 step=1.0,
-                key=f"{clean_key(region)}_bau_growth"
+                key=f"{clean_key(region)}_bau_form"
             )
 
         with dc_col:
@@ -90,134 +200,92 @@ for region in REGIONS:
                 "DC %",
                 min_value=0.0,
                 max_value=100.0,
-                value=default_dc_region[region],
+                value=float(st.session_state.regional_growth[region]["DC"]),
                 step=1.0,
-                key=f"{clean_key(region)}_dc_growth"
+                key=f"{clean_key(region)}_dc_form"
             )
 
-        regional_growth[region] = {
+        updated_regional_growth[region] = {
             "BAU": bau_value,
             "DC": dc_value
         }
 
+    st.markdown("---")
+    st.subheader("👥 BU Wise Attrition")
 
-st.sidebar.subheader("BU Wise Attrition")
+    updated_attrition = {}
 
-attrition_parameters = {}
-
-with st.sidebar.expander("Attrition Inputs", expanded=False):
     for product in PRODUCTS:
-        attrition_parameters[product] = st.number_input(
+        updated_attrition[product] = st.number_input(
             f"{product} Attrition %",
             min_value=0.0,
             max_value=30.0,
-            value=8.0,
+            value=float(st.session_state.attrition_parameters[product]),
             step=0.5,
-            key=f"{clean_key(product)}_attrition"
+            key=f"{clean_key(product)}_attrition_form"
         )
 
+    st.markdown("---")
+    st.subheader("⚙️ Workforce Productivity")
 
-st.sidebar.subheader("Workforce Productivity")
+    updated_productive_hours = st.number_input(
+        "Productive Hours Per Day",
+        min_value=1.0,
+        max_value=24.0,
+        value=float(st.session_state.productive_hours),
+        step=0.5
+    )
 
-productive_hours = st.sidebar.number_input(
-    "Productive Hours Per Day",
-    min_value=1.0,
-    max_value=24.0,
-    value=7.0,
-    step=0.5
-)
+    updated_working_days = st.number_input(
+        "Working Days Per Month",
+        min_value=1,
+        max_value=31,
+        value=int(st.session_state.working_days),
+        step=1
+    )
 
-working_days = st.sidebar.number_input(
-    "Working Days Per Month",
-    min_value=1,
-    max_value=31,
-    value=20,
-    step=1
-)
+    updated_target_utilization = st.number_input(
+        "Target Engineer Utilization %",
+        min_value=1.0,
+        max_value=100.0,
+        value=float(st.session_state.target_utilization),
+        step=1.0
+    )
 
-target_utilization = st.sidebar.number_input(
-    "Target Engineer Utilization %",
-    min_value=1.0,
-    max_value=100.0,
-    value=90.0,
-    step=1.0
-)
+    apply_assumptions = st.form_submit_button("✅ Apply Assumptions")
+
+if apply_assumptions:
+    st.session_state.regional_growth = updated_regional_growth
+    st.session_state.attrition_parameters = updated_attrition
+    st.session_state.productive_hours = updated_productive_hours
+    st.session_state.working_days = updated_working_days
+    st.session_state.target_utilization = updated_target_utilization
+    st.sidebar.success("Assumptions applied.")
 
 
 # =====================================================
 # MAIN PAGE
 # =====================================================
 
-st.title("AI Enabled Workforce & Capacity Planning")
+st.title("🚀 AI Enabled Workforce & Capacity Planning")
 
 st.info(
-    "Enter regional BAU and DC growth values in the sidebar, upload workforce_input.csv, "
-    "and review BAU requirement, DC addition, combined requirement and hiring gap."
+    "Upload workforce_input.csv, adjust planning assumptions in the sidebar, "
+    "click Apply Assumptions, and review BAU requirement, DC addition, combined requirement and hiring gap."
 )
 
 uploaded_file = st.file_uploader("Upload workforce_input.csv", type=["csv"])
 
-if uploaded_file is None:
+if uploaded_file is not None:
+    raw_df = pd.read_csv(uploaded_file)
+    st.session_state.input_df = validate_input_data(raw_df)
+    st.success("CSV uploaded successfully.")
+
+if st.session_state.input_df is None:
     st.warning("Please upload workforce_input.csv to start workforce planning.")
     st.stop()
 
-
-# =====================================================
-# READ AND VALIDATE CSV
-# =====================================================
-
-df = pd.read_csv(uploaded_file)
-df.columns = df.columns.str.strip()
-
-required_columns = [
-    "Region",
-    "Product",
-    "Current_SE",
-    "Breakdown_WO",
-    "Breakdown_Hrs",
-    "PM_WO",
-    "PM_Hrs",
-    "Startup_WO",
-    "Startup_Hrs"
-]
-
-missing_columns = [col for col in required_columns if col not in df.columns]
-
-if missing_columns:
-    st.error(f"Missing required columns: {missing_columns}")
-    st.stop()
-
-df["Region"] = df["Region"].astype(str).str.strip()
-df["Product"] = df["Product"].astype(str).str.strip()
-df["Product"] = df["Product"].replace(PRODUCT_ALIASES)
-
-invalid_regions = sorted(set(df["Region"].unique()) - set(REGIONS))
-invalid_products = sorted(set(df["Product"].unique()) - set(PRODUCTS))
-
-if invalid_regions:
-    st.error(f"Invalid regions found in uploaded file: {invalid_regions}")
-    st.stop()
-
-if invalid_products:
-    st.error(f"Invalid products found in uploaded file: {invalid_products}")
-    st.stop()
-
-numeric_columns = [
-    "Current_SE",
-    "Breakdown_WO",
-    "Breakdown_Hrs",
-    "PM_WO",
-    "PM_Hrs",
-    "Startup_WO",
-    "Startup_Hrs"
-]
-
-for col in numeric_columns:
-    df[col] = pd.to_numeric(df[col], errors="coerce")
-
-if df[numeric_columns].isnull().any().any():
-    st.error("Some numeric columns contain blank or invalid numeric values.")
-    st.stop()
+df = st.session_state.input_df
 
 
 # =====================================================
@@ -226,11 +294,11 @@ if df[numeric_columns].isnull().any().any():
 
 result = calculate_workforce(
     df=df,
-    regional_growth=regional_growth,
-    attrition_parameters=attrition_parameters,
-    productive_hours=productive_hours,
-    working_days=working_days,
-    target_utilization=target_utilization
+    regional_growth=st.session_state.regional_growth,
+    attrition_parameters=st.session_state.attrition_parameters,
+    productive_hours=st.session_state.productive_hours,
+    working_days=st.session_state.working_days,
+    target_utilization=st.session_state.target_utilization
 )
 
 if result.empty:
@@ -245,7 +313,10 @@ required_result_columns = [
     "Combined Additional Required"
 ]
 
-missing_result_columns = [col for col in required_result_columns if col not in result.columns]
+missing_result_columns = [
+    col for col in required_result_columns
+    if col not in result.columns
+]
 
 if missing_result_columns:
     st.error(
@@ -254,14 +325,12 @@ if missing_result_columns:
     )
     st.stop()
 
-st.success("CSV uploaded successfully. Dashboard output is calculated below.")
-
 
 # =====================================================
 # DASHBOARD SUMMARY
 # =====================================================
 
-st.subheader("Dashboard Summary")
+st.subheader("📊 Dashboard Summary")
 
 total_current = df["Current_SE"].sum()
 total_available = round(result["Available Engineers"].sum(), 1)
@@ -285,7 +354,7 @@ kpi6.metric("Hiring Gap", total_combined_hiring)
 # =====================================================
 
 st.markdown("---")
-st.subheader("Visual Dashboard")
+st.subheader("📈 Visual Dashboard")
 
 chart_col1, chart_col2 = st.columns(2)
 
@@ -318,24 +387,21 @@ with chart_col4:
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs(
     [
-        "Input Data",
-        "Full Results",
-        "BAU Requirement",
-        "DC and Combined",
-        "Download"
+        "📄 Input Data",
+        "📋 Full Results",
+        "🟣 BAU Requirement",
+        "🔵 DC and Combined",
+        "⬇️ Download"
     ]
 )
-
 
 with tab1:
     st.subheader("Uploaded Input Data")
     st.dataframe(df, use_container_width=True)
 
-
 with tab2:
     st.subheader("Workforce Planning Results")
     st.dataframe(result, use_container_width=True)
-
 
 with tab3:
     st.subheader("BAU Requirement Table")
@@ -349,12 +415,7 @@ with tab3:
     )
 
     bau_total = add_total_row_and_column(bau_table).round(1)
-
-    st.dataframe(
-        bau_total,
-        use_container_width=True
-    )
-
+    st.dataframe(bau_total, use_container_width=True)
 
 with tab4:
     st.subheader("DC Addition Requirement Table")
@@ -368,11 +429,7 @@ with tab4:
     )
 
     dc_total = add_total_row_and_column(dc_table).round(1)
-
-    st.dataframe(
-        dc_total,
-        use_container_width=True
-    )
+    st.dataframe(dc_total, use_container_width=True)
 
     st.subheader("Combined BAU + DC Requirement Table")
 
@@ -385,11 +442,7 @@ with tab4:
     )
 
     combined_total = add_total_row_and_column(combined_table).round(1)
-
-    st.dataframe(
-        combined_total,
-        use_container_width=True
-    )
+    st.dataframe(combined_total, use_container_width=True)
 
     st.subheader("Combined Hiring Requirement Table")
 
@@ -402,12 +455,7 @@ with tab4:
     )
 
     hiring_total = add_total_row_and_column(hiring_table).round(1)
-
-    st.dataframe(
-        hiring_total,
-        use_container_width=True
-    )
-
+    st.dataframe(hiring_total, use_container_width=True)
 
 with tab5:
     st.subheader("Download Output")
